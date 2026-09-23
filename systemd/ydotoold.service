@@ -1,0 +1,12 @@
+[Unit]
+Description=ydotoold — background daemon for ydotool
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ydotoold
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

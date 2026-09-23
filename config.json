@@ -1,0 +1,14 @@
+{
+  "push_to_talk_key": "RIGHTCTRL",
+  "whisper_model": "base",
+  "language": "en",
+  "sample_rate": 16000,
+  "wayland_typing": {
+    "preferred": ["wtype", "ydotool"],
+    "fallback_to_clipboard": true
+  },
+  "audio": {
+    "channels": 1,
+    "dtype": "int16"
+  }
+}

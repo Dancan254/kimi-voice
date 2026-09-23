@@ -1,0 +1,8 @@
+# Grant the 'input' group access to keyboard event devices and uinput.
+# Install with:
+#   sudo cp ~/.config/kimi-voice/50-kimi-voice.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+
+KERNEL=="event*", SUBSYSTEM=="input", GROUP="input", MODE="0660"
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660"

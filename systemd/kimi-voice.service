@@ -1,0 +1,14 @@
+[Unit]
+Description=Kimi Voice — push-to-talk dictation for Kimi Code CLI
+After=graphical-session.target
+Requires=ydotoold.service
+
+[Service]
+Type=simple
+ExecStart=%h/.venv/kimi-voice/bin/python %h/bin/kimi-voice.py
+Restart=on-failure
+RestartSec=5
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=default.target

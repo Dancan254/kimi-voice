@@ -1,0 +1,2 @@
+#!/bin/bash
+exec ~/.venv/kimi-voice/bin/python ~/bin/kimi-voice.py "$@"
