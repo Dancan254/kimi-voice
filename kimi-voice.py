@@ -71,17 +71,26 @@ if IS_LINUX:
 
     ALL_KEY_CODES = {**KEY_NAME_TO_CODE, **MOUSE_BUTTON_TO_CODE}
 
-# macOS uses pynput Key/Button objects.
+# macOS uses pynput Key/Button objects. Some keys (e.g. scroll_lock) are not
+# available on macOS, so we build the map dynamically and skip missing ones.
+def _mac_key(name: str):
+    try:
+        return getattr(Key, name.lower())
+    except AttributeError:
+        return None
+
 MAC_KEY_NAME_TO_KEY = {
-    "RIGHTCTRL": Key.ctrl_r,
-    "LEFTCTRL": Key.ctrl_l,
-    "RIGHTALT": Key.alt_r,
-    "LEFTALT": Key.alt_l,
-    "SCROLLLOCK": Key.scroll_lock,
-    "F13": Key.f13,
-    "F14": Key.f14,
-    "F15": Key.f15,
-    "SPACE": Key.space,
+    name: key for name, key in {
+        "RIGHTCTRL": _mac_key("ctrl_r"),
+        "LEFTCTRL": _mac_key("ctrl_l"),
+        "RIGHTALT": _mac_key("alt_r"),
+        "LEFTALT": _mac_key("alt_l"),
+        "SCROLLLOCK": _mac_key("scroll_lock"),
+        "F13": _mac_key("f13"),
+        "F14": _mac_key("f14"),
+        "F15": _mac_key("f15"),
+        "SPACE": _mac_key("space"),
+    }.items() if key is not None
 }
 
 MAC_MOUSE_NAME_TO_BUTTON = {
