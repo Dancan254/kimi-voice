@@ -7,3 +7,4 @@ pystray~=0.19
 Pillow~=10.4
 evdev~=1.7; sys_platform == 'linux'
 pyobjc~=10.3; sys_platform == 'darwin'
+pyobjc-framework-Quartz~=10.3; sys_platform == 'darwin'

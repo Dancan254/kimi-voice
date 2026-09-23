@@ -6,8 +6,7 @@
     <string>com.dancan254.kimi-voice</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/REPLACE_ME/.venv/kimi-voice/bin/python</string>
-        <string>/Users/REPLACE_ME/bin/kimi-voice.py</string>
+        <string>/Users/REPLACE_ME/bin/kimi-voice-macos-wrapper</string>
     </array>
     <key>RunAtLoad</key>
     <true/>

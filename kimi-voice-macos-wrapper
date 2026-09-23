@@ -1,0 +1,8 @@
+#!/bin/bash
+# Wrapper for launching kimi-voice on macOS via launchd.
+# Sets up Homebrew library paths that are not inherited from the shell environment.
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+export DYLD_LIBRARY_PATH="/opt/homebrew/lib:/usr/local/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+
+exec "$HOME/.venv/kimi-voice/bin/python" "$HOME/bin/kimi-voice.py" "$@"

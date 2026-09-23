@@ -34,6 +34,11 @@ install_binaries_and_config() {
     fi
 }
 
+install_macos_wrapper() {
+    cp "$REPO_DIR/kimi-voice-macos-wrapper" "$BIN_DIR/kimi-voice-macos-wrapper"
+    chmod +x "$BIN_DIR/kimi-voice-macos-wrapper"
+}
+
 install_linux() {
     SYSTEMD_DIR="$HOME/.config/systemd/user"
 
@@ -96,6 +101,7 @@ install_macos() {
 
     install_python_deps
     install_binaries_and_config false
+    install_macos_wrapper
 
     echo "==> Installing LaunchAgent"
     mkdir -p "$LAUNCHD_DIR"
