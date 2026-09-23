@@ -1020,10 +1020,11 @@ class VoiceApp:
             tray_thread = threading.Thread(target=self.tray.run, daemon=True)
             tray_thread.start()
 
-        self.input_manager = InputDeviceManager(self)
+        logging.info("Starting input manager")
         self.input_manager.start()
 
         try:
+            logging.info("kimi-voice is running")
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
@@ -1051,9 +1052,14 @@ def main():
     args = parser.parse_args()
 
     setup_logging()
+    logging.info("kimi-voice starting on platform=%s", sys.platform)
     config = load_config(args.config)
     app = VoiceApp(args, config)
-    app.run()
+    try:
+        app.run()
+    except Exception as ex:
+        logging.error("Fatal error: %s\n%s", ex, traceback.format_exc())
+        raise
 
 
 if __name__ == "__main__":
