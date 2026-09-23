@@ -9,7 +9,7 @@ BIN_DIR="$HOME/bin"
 
 echo "==> Installing system dependencies"
 sudo apt update
-sudo apt install -y python3-venv python3-dev python3-evdev portaudio19-dev xclip libportaudio2
+sudo apt install -y python3-venv python3-dev python3-evdev python3-tk portaudio19-dev xclip libportaudio2 libappindicator3-1 gir1.2-appindicator3-0.1
 
 # ydotool is used on Wayland; wtype is preferred but harder to install on Ubuntu.
 if ! command -v ydotoold &>/dev/null; then

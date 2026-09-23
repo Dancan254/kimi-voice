@@ -1,14 +1,64 @@
 {
   "push_to_talk_key": "RIGHTCTRL",
+  "push_to_talk_mode": "hold",
+  "double_tap_ms": 300,
   "whisper_model": "base",
   "language": "en",
   "sample_rate": 16000,
+  "vad": {
+    "enabled": true,
+    "energy_threshold": 0.01,
+    "min_speech_duration_ms": 250,
+    "prefix_ms": 200
+  },
+  "commands": {
+    "enabled": true,
+    "map": {
+      "period": ".",
+      "dot": ".",
+      "comma": ",",
+      "question mark": "?",
+      "exclamation mark": "!",
+      "colon": ":",
+      "semicolon": ";",
+      "new line": "\n",
+      "newline": "\n",
+      "new paragraph": "\n\n",
+      "tab": "\t",
+      "open bracket": "(",
+      "close bracket": ")",
+      "open curly": "{",
+      "close curly": "}",
+      "open square": "[",
+      "close square": "]",
+      "quote": "\"",
+      "single quote": "'",
+      "backtick": "`",
+      "dash": "-",
+      "underscore": "_",
+      "equals": "=",
+      "plus": "+",
+      "slash": "/",
+      "backslash": "\\",
+      "asterisk": "*",
+      "ampersand": "&",
+      "percent": "%",
+      "dollar": "$",
+      "hash": "#",
+      "at": "@",
+      "exclamation": "!"
+    }
+  },
   "wayland_typing": {
     "preferred": ["wtype", "ydotool"],
-    "fallback_to_clipboard": true
+    "fallback_to_clipboard": true,
+    "action_menu": true
   },
   "audio": {
     "channels": 1,
     "dtype": "int16"
+  },
+  "tray": {
+    "enabled": true
   }
 }

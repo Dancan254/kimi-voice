@@ -5,10 +5,13 @@ Push-to-talk voice input for Kimi Code CLI on Ubuntu. Hold a key, speak, release
 ## Features
 
 - Local transcription with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (no cloud, no API key).
-- Works on both X11 and Wayland.
-- Configurable push-to-talk key, model, and language.
-- Auto-reconnects if the keyboard device is disconnected.
-- Retries the audio stream if the mic is briefly busy.
+- Whisper model is loaded once and reused — no pause between phrases.
+- Listens to **all** keyboards and mice simultaneously.
+- Configurable push-to-talk key with hold, toggle, or double-tap modes.
+- Energy-based voice activity detection trims silence before transcription.
+- Spoken punctuation/commands are converted to real characters.
+- System tray icon with live status and one-click model switching.
+- Post-transcription action menu on Wayland (type, copy, discard).
 - Systemd user services for `ydotoold` and `kimi-voice` so it runs automatically.
 
 ## Requirements
@@ -27,7 +30,7 @@ cd kimi-voice
 
 The installer will:
 
-1. Install system packages (`ydotool`, `python3-venv`, `portaudio`, `xclip`, etc.).
+1. Install system packages (`ydotool`, `python3-venv`, `python3-tk`, `portaudio`, `xclip`, etc.).
 2. Create a Python virtual environment at `~/.venv/kimi-voice`.
 3. Copy the scripts to `~/bin/kimi-voice`.
 4. Install udev rules so the script can read `/dev/input/event*` without `sudo`.
@@ -36,13 +39,14 @@ The installer will:
 
 ## Usage
 
-After install, the service is already running. Hold **Right Ctrl**, speak, release. The transcription is typed (X11) or copied to the clipboard (Wayland).
+After install, the service is already running in the tray. Hold **Right Ctrl**, speak, release. The transcription is typed (X11) or handled via the action menu (Wayland).
 
 Run manually:
 
 ```bash
-kimi-voice              # continuous mode
+kimi-voice              # continuous mode with tray icon
 kimi-voice --once       # one phrase, then exit
+kimi-voice --no-tray    # continuous mode without tray icon
 ```
 
 Inside Kimi Code CLI shell mode:
@@ -58,21 +62,46 @@ Edit `~/.config/kimi-voice/config.json`:
 ```json
 {
   "push_to_talk_key": "RIGHTCTRL",
+  "push_to_talk_mode": "hold",
+  "double_tap_ms": 300,
   "whisper_model": "base",
   "language": "en",
   "sample_rate": 16000,
+  "vad": {
+    "enabled": true,
+    "energy_threshold": 0.01,
+    "min_speech_duration_ms": 250,
+    "prefix_ms": 200
+  },
+  "commands": {
+    "enabled": true,
+    "map": { "period": ".", "comma": ",", "new line": "\n" }
+  },
   "wayland_typing": {
     "preferred": ["wtype", "ydotool"],
-    "fallback_to_clipboard": true
+    "fallback_to_clipboard": true,
+    "action_menu": true
   },
   "audio": {
     "channels": 1,
     "dtype": "int16"
+  },
+  "tray": {
+    "enabled": true
   }
 }
 ```
 
-Supported push-to-talk keys: `RIGHTCTRL`, `LEFTCTRL`, `RIGHTALT`, `LEFTALT`, `SCROLLLOCK`, `F13`, `F14`, `F15`, `SPACE`.
+Supported push-to-talk keys:
+
+- Keyboard: `RIGHTCTRL`, `LEFTCTRL`, `RIGHTALT`, `LEFTALT`, `SCROLLLOCK`, `F13`, `F14`, `F15`, `SPACE`
+- Mouse: `MOUSELEFT`, `MOUSERIGHT`, `MOUSEMIDDLE`, `MOUSESIDE`, `MOUSEEXTRA`
+
+Push-to-talk modes:
+
+- `hold` — record while the key is held (default)
+- `toggle` — tap to start, tap again to stop
+- `double_tap` — double-tap to toggle recording
 
 ## Wayland typing
 
@@ -80,7 +109,34 @@ On Wayland the script tries, in order:
 
 1. `wtype` — direct typing, but must be built from source on Ubuntu.
 2. `ydotool` — uses the `ydotoold` daemon (installed by `install.sh`).
-3. Clipboard fallback — copies the text with `wl-copy` / `xclip` so you can paste with `Ctrl+V`.
+3. Action menu — a small popup lets you type, copy, or discard the transcription.
+4. Clipboard fallback — copies the text with `wl-copy` / `xclip` so you can paste with `Ctrl+V`.
+
+## Commands / spoken punctuation
+
+When `commands.enabled` is true, phrases like these are converted:
+
+| Say | Output |
+|-----|--------|
+| period / dot | `.` |
+| comma | `,` |
+| new line | `\n` |
+| open bracket | `(` |
+| close curly | `}` |
+| tab | `\t` |
+
+Add your own mappings in `config.json` under `commands.map`.
+
+## System tray
+
+Right-click the tray icon to:
+
+- See current status (ready / recording)
+- Switch Whisper models (`tiny`, `base`, `small`, `medium`, `large-v2`)
+- Reload config without restarting
+- Exit
+
+To disable the tray icon, set `tray.enabled` to `false` or run `kimi-voice --no-tray`.
 
 ## Systemd services
 
@@ -114,8 +170,8 @@ journalctl --user -u kimi-voice.service -f
 
 ## Security note
 
-This tool reads raw keyboard events from `/dev/input/event*`. It is intended for personal use on your own machine. Do not install it on shared or untrusted systems.
+This tool reads raw keyboard and mouse events from `/dev/input/event*`. It is intended for personal use on your own machine. Do not install it on shared or untrusted systems.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
