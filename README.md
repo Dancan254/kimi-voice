@@ -28,6 +28,16 @@ cd kimi-voice
 ./install.sh
 ```
 
+## Updating
+
+If you already installed an earlier version, pull the latest code and re-run the installer. It will upgrade the virtual environment, replace the app scripts, and restart the services without overwriting your config file.
+
+```bash
+cd kimi-voice
+git pull
+./install.sh
+```
+
 The installer will:
 
 1. Install system packages (`ydotool`, `python3-venv`, `python3-tk`, `portaudio`, `xclip`, etc.).

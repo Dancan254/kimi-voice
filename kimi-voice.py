@@ -21,6 +21,7 @@ import argparse
 import glob
 import json
 import logging
+import re
 import os
 import shutil
 import subprocess
@@ -154,20 +155,21 @@ def default_config():
 
 
 def load_config(path: Path):
+    defaults = default_config()
     if not path.exists():
-        return default_config()
+        return defaults
     try:
         with open(path) as f:
             cfg = json.load(f)
-        base = default_config()
+        base = defaults.copy()
         base.update(cfg)
         for key in base:
             if isinstance(base[key], dict) and key in cfg:
-                base[key] = {**default_config()[key], **cfg[key]}
+                base[key] = {**defaults[key], **cfg[key]}
         return base
     except json.JSONDecodeError as ex:
         logging.error("Config file %s is invalid JSON: %s", path, ex)
-        return default_config()
+        return defaults
 
 
 def save_config(path: Path, config: dict):
@@ -251,6 +253,9 @@ def rms_energy(frame: np.ndarray) -> float:
     data = frame.astype(np.float64)
     if len(data) == 0:
         return 0.0
+    # Normalize int16 samples to [-1, 1] so the threshold is independent of dtype.
+    if frame.dtype == np.int16:
+        data = data / 32768.0
     return float(np.sqrt(np.mean(data ** 2)))
 
 
@@ -440,10 +445,18 @@ class StreamingTranscriber:
 
 
 def process_commands(text: str, command_map: dict) -> str:
-    lower = text.lower()
-    for phrase, replacement in command_map.items():
-        lower = lower.replace(phrase, replacement)
-    return lower
+    """Replace spoken commands/punctuation while preserving surrounding case."""
+    if not command_map:
+        return text
+
+    # Sort longest phrase first so "new paragraph" beats "new line".
+    phrases = sorted(command_map.keys(), key=len, reverse=True)
+    pattern = re.compile("|".join(re.escape(p) for p in phrases), re.IGNORECASE)
+
+    def replace_match(match: re.Match) -> str:
+        return command_map[match.group(0).lower()]
+
+    return pattern.sub(replace_match, text)
 
 
 def type_with_wtype(text):
@@ -790,6 +803,9 @@ class VoiceApp:
         else:
             self._transcribe_and_type(frames)
 
+        if self.args.once:
+            self.stop()
+
     def _output_text(self, text: str):
         if not text:
             return
@@ -800,9 +816,6 @@ class VoiceApp:
         self.state.last_text = text
         print(f"[transcribed] {text}")
         self.output.type_text(text + " ")
-
-        if self.args.once:
-            self.stop()
 
     def _transcribe_and_type(self, frames):
         sample_rate = self.config.get("sample_rate", 16000)

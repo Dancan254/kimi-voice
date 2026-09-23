@@ -17,10 +17,16 @@ if ! command -v ydotoold &>/dev/null; then
     sudo apt install -y ydotool
 fi
 
-echo "==> Creating Python virtual environment"
-python3 -m venv "$VENV_DIR"
-"$VENV_DIR/bin/pip" install --upgrade pip
-"$VENV_DIR/bin/pip" install -r "$REPO_DIR/requirements.txt"
+if [ -d "$VENV_DIR" ]; then
+    echo "==> Updating existing Python virtual environment"
+    "$VENV_DIR/bin/pip" install --upgrade pip
+    "$VENV_DIR/bin/pip" install --upgrade -r "$REPO_DIR/requirements.txt"
+else
+    echo "==> Creating Python virtual environment"
+    python3 -m venv "$VENV_DIR"
+    "$VENV_DIR/bin/pip" install --upgrade pip
+    "$VENV_DIR/bin/pip" install -r "$REPO_DIR/requirements.txt"
+fi
 
 echo "==> Installing binaries and config"
 mkdir -p "$BIN_DIR" "$CONFIG_DIR" "$SYSTEMD_DIR"
@@ -28,7 +34,9 @@ cp "$REPO_DIR/kimi-voice.py" "$BIN_DIR/kimi-voice.py"
 chmod +x "$BIN_DIR/kimi-voice.py"
 cp "$REPO_DIR/kimi-voice" "$BIN_DIR/kimi-voice"
 chmod +x "$BIN_DIR/kimi-voice"
-cp "$REPO_DIR/config.json" "$CONFIG_DIR/config.json"
+if [ ! -f "$CONFIG_DIR/config.json" ]; then
+    cp "$REPO_DIR/config.json" "$CONFIG_DIR/config.json"
+fi
 
 echo "==> Installing udev rules"
 sudo cp "$REPO_DIR/udev/50-kimi-voice.rules" /etc/udev/rules.d/
