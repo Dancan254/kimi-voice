@@ -1,6 +1,6 @@
 # kimi-voice
 
-Push-to-talk voice input for Kimi Code CLI on Ubuntu. Hold a key, speak, release — the transcription is typed into the focused window (or copied to the clipboard on Wayland).
+Push-to-talk voice input for Kimi Code CLI on Ubuntu and macOS. Hold a key, speak, release — the transcription is typed into the focused window (or copied to the clipboard on Wayland / macOS).
 
 ## Features
 
@@ -16,9 +16,18 @@ Push-to-talk voice input for Kimi Code CLI on Ubuntu. Hold a key, speak, release
 
 ## Requirements
 
+### Ubuntu
+
 - Ubuntu (tested on 24.04 with Wayland)
 - A microphone
 - `sudo` access for installing dependencies and udev rules
+
+### macOS
+
+- macOS 12+ (Monterey or later)
+- A microphone
+- [Homebrew](https://brew.sh)
+- Microphone and Accessibility permissions granted on first run
 
 ## Quick install
 
@@ -27,6 +36,8 @@ git clone https://github.com/Dancan254/kimi-voice.git
 cd kimi-voice
 ./install.sh
 ```
+
+The installer detects your OS (Linux/macOS) and runs the appropriate steps.
 
 ## Updating
 
@@ -40,16 +51,16 @@ git pull
 
 The installer will:
 
-1. Install system packages (`ydotool`, `python3-venv`, `python3-tk`, `portaudio`, `xclip`, etc.).
-2. Create a Python virtual environment at `~/.venv/kimi-voice`.
+1. Install system packages (`ydotool`, `python3-venv`, `python3-tk`, `portaudio`, `xclip` on Ubuntu; `portaudio` via Homebrew on macOS).
+2. Create or upgrade a Python virtual environment at `~/.venv/kimi-voice`.
 3. Copy the scripts to `~/bin/kimi-voice`.
-4. Install udev rules so the script can read `/dev/input/event*` without `sudo`.
-5. Add you to the `input` group (log out and back in if this is the first install).
-6. Enable and start the systemd user services.
+4. On Ubuntu: install udev rules so the script can read `/dev/input/event*` without `sudo`.
+5. On Ubuntu: add you to the `input` group (log out and back in if this is the first install).
+6. On Ubuntu: enable and start the systemd user services. On macOS: install and load a LaunchAgent.
 
 ## Usage
 
-After install, the service is already running in the tray. Hold **Right Ctrl**, speak, release. The transcription is typed (X11) or handled via the action menu (Wayland).
+After install, the service is already running in the tray. Hold **Right Ctrl**, speak, release. The transcription is typed (X11, macOS) or handled via the action menu / clipboard fallback (Wayland).
 
 Run manually:
 
@@ -161,7 +172,9 @@ Right-click the tray icon to:
 
 To disable the tray icon, set `tray.enabled` to `false` or run `kimi-voice --no-tray`.
 
-## Systemd services
+## Background service
+
+### Ubuntu (systemd)
 
 ```bash
 systemctl --user status ydotoold.service
@@ -181,6 +194,26 @@ To disable auto-start:
 ```bash
 systemctl --user disable kimi-voice.service
 systemctl --user disable ydotoold.service
+```
+
+### macOS (LaunchAgent)
+
+```bash
+launchctl list com.dancan254.kimi-voice
+# Logs:
+tail -f /tmp/kimi-voice.out.log /tmp/kimi-voice.err.log
+```
+
+To stop:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.dancan254.kimi-voice.plist
+```
+
+To start again:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.dancan254.kimi-voice.plist
 ```
 
 ## Streaming / long audio
@@ -239,9 +272,18 @@ The script logs to the systemd journal. Follow live:
 journalctl --user -u kimi-voice.service -f
 ```
 
+## macOS permissions
+
+On macOS, `kimi-voice` uses `pynput` to listen for the push-to-talk key and type the transcription. The first time the service runs, macOS will prompt for:
+
+- **Microphone** — needed to record your voice.
+- **Accessibility** — needed to listen for global hotkeys and type into other apps.
+
+Grant both in **System Settings > Privacy & Security**. If the app cannot type, re-check the Accessibility permission.
+
 ## Security note
 
-This tool reads raw keyboard and mouse events from `/dev/input/event*`. It is intended for personal use on your own machine. Do not install it on shared or untrusted systems.
+This tool reads raw keyboard and mouse events. On Ubuntu it reads from `/dev/input/event*`; on macOS it uses global input listeners via `pynput`. It is intended for personal use on your own machine. Do not install it on shared or untrusted systems.
 
 ## License
 

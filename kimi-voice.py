@@ -33,36 +33,66 @@ import traceback
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
+import pyperclip
 import sounddevice as sd
-from evdev import InputDevice, list_devices, ecodes as e
-from pynput.keyboard import Controller
+from pynput.keyboard import Controller, Key
+
+IS_LINUX = sys.platform.startswith("linux")
+IS_MACOS = sys.platform == "darwin"
+
+if IS_LINUX:
+    from evdev import InputDevice, list_devices, ecodes as e
 
 DEFAULT_CONFIG = Path.home() / ".config" / "kimi-voice" / "config.json"
 
-KEY_NAME_TO_CODE = {
-    "RIGHTCTRL": e.KEY_RIGHTCTRL,
-    "LEFTCTRL": e.KEY_LEFTCTRL,
-    "RIGHTALT": e.KEY_RIGHTALT,
-    "LEFTALT": e.KEY_LEFTALT,
-    "SCROLLLOCK": e.KEY_SCROLLLOCK,
-    "F13": e.KEY_F13,
-    "F14": e.KEY_F14,
-    "F15": e.KEY_F15,
-    "SPACE": e.KEY_SPACE,
+if IS_LINUX:
+    KEY_NAME_TO_CODE = {
+        "RIGHTCTRL": e.KEY_RIGHTCTRL,
+        "LEFTCTRL": e.KEY_LEFTCTRL,
+        "RIGHTALT": e.KEY_RIGHTALT,
+        "LEFTALT": e.KEY_LEFTALT,
+        "SCROLLLOCK": e.KEY_SCROLLLOCK,
+        "F13": e.KEY_F13,
+        "F14": e.KEY_F14,
+        "F15": e.KEY_F15,
+        "SPACE": e.KEY_SPACE,
+    }
+
+    MOUSE_BUTTON_TO_CODE = {
+        "MOUSELEFT": e.BTN_LEFT,
+        "MOUSERIGHT": e.BTN_RIGHT,
+        "MOUSEMIDDLE": e.BTN_MIDDLE,
+        "MOUSESIDE": e.BTN_SIDE,
+        "MOUSEEXTRA": e.BTN_EXTRA,
+    }
+
+    ALL_KEY_CODES = {**KEY_NAME_TO_CODE, **MOUSE_BUTTON_TO_CODE}
+
+# macOS uses pynput Key/Button objects.
+MAC_KEY_NAME_TO_KEY = {
+    "RIGHTCTRL": Key.ctrl_r,
+    "LEFTCTRL": Key.ctrl_l,
+    "RIGHTALT": Key.alt_r,
+    "LEFTALT": Key.alt_l,
+    "SCROLLLOCK": Key.scroll_lock,
+    "F13": Key.f13,
+    "F14": Key.f14,
+    "F15": Key.f15,
+    "SPACE": Key.space,
 }
 
-MOUSE_BUTTON_TO_CODE = {
-    "MOUSELEFT": e.BTN_LEFT,
-    "MOUSERIGHT": e.BTN_RIGHT,
-    "MOUSEMIDDLE": e.BTN_MIDDLE,
-    "MOUSESIDE": e.BTN_SIDE,
-    "MOUSEEXTRA": e.BTN_EXTRA,
+MAC_MOUSE_NAME_TO_BUTTON = {
+    "MOUSELEFT": "left",
+    "MOUSERIGHT": "right",
+    "MOUSEMIDDLE": "middle",
+    "MOUSESIDE": "x1",
+    "MOUSEEXTRA": "x2",
 }
 
-ALL_KEY_CODES = {**KEY_NAME_TO_CODE, **MOUSE_BUTTON_TO_CODE}
+MAC_ALL_KEYS = {**MAC_KEY_NAME_TO_KEY, **MAC_MOUSE_NAME_TO_BUTTON}
 
 COMMANDS = {
     "period": ".",
@@ -178,13 +208,22 @@ def save_config(path: Path, config: dict):
         json.dump(config, f, indent=2)
 
 
-def key_code_from_config(config):
+def ptt_key_from_config(config):
+    """Return the platform-specific push-to-talk key identifier."""
     name = config.get("push_to_talk_key", "RIGHTCTRL").upper()
-    code = ALL_KEY_CODES.get(name)
-    if code is None:
+
+    if IS_LINUX:
+        code = ALL_KEY_CODES.get(name)
+        if code is None:
+            logging.warning("Unknown push-to-talk key '%s'. Using RIGHTCTRL.", name)
+            code = e.KEY_RIGHTCTRL
+        return code
+
+    key = MAC_ALL_KEYS.get(name)
+    if key is None:
         logging.warning("Unknown push-to-talk key '%s'. Using RIGHTCTRL.", name)
-        code = e.KEY_RIGHTCTRL
-    return code
+        key = Key.ctrl_r
+    return key
 
 
 def is_virtual_device(dev):
@@ -480,19 +519,11 @@ def type_with_ydotool(text):
 
 
 def copy_to_clipboard(text):
-    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    if session_type == "wayland":
-        try:
-            subprocess.run(["wl-copy"], input=text, text=True, check=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
-        except Exception:
-            pass
     try:
-        subprocess.run(["xclip", "-selection", "clipboard"], input=text, text=True, check=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        pyperclip.copy(text)
         return True
-    except Exception:
+    except Exception as ex:
+        logging.error("Could not copy to clipboard: %s", ex)
         return False
 
 
@@ -553,6 +584,23 @@ class OutputManager:
             else:
                 return False
 
+        if IS_MACOS:
+            return self._type_macos(text)
+        return self._type_linux(text)
+
+    def _type_macos(self, text: str) -> bool:
+        try:
+            self.keyboard.type(text)
+            return True
+        except Exception as ex:
+            logging.error("Could not type on macOS: %s", ex)
+            if copy_to_clipboard(text):
+                print("[copied to clipboard — paste with Cmd+V]")
+                return True
+            print(f"[transcription] {text}")
+            return False
+
+    def _type_linux(self, text: str) -> bool:
         session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
         if session_type == "wayland":
             for tool in self.config.get("wayland_typing", {}).get("preferred", ["wtype", "ydotool"]):
@@ -646,6 +694,89 @@ class TrayManager:
             self.icon.stop()
 
 
+class MacOSInputManager:
+    """Global push-to-talk input using pynput (keyboard + mouse)."""
+
+    def __init__(self, app: "VoiceApp"):
+        self.app = app
+        self.ptt_key = app.ptt_key
+        self.mode = app.config.get("push_to_talk_mode", "hold")
+        self.double_tap_ms = app.config.get("double_tap_ms", 300)
+        self.last_release = 0.0
+        self._keyboard_listener = None
+        self._mouse_listener = None
+        self._stop = threading.Event()
+
+    def _is_ptt_key(self, key) -> bool:
+        return key == self.ptt_key
+
+    def _is_ptt_button(self, button) -> bool:
+        return getattr(button, "name", str(button)) == self.ptt_key
+
+    def _on_key_press(self, key):
+        if self._stop.is_set():
+            return False
+        if self._is_ptt_key(key):
+            self._handle_press()
+
+    def _on_key_release(self, key):
+        if self._stop.is_set():
+            return False
+        if self._is_ptt_key(key):
+            self._handle_release()
+
+    def _on_mouse_click(self, x, y, button, pressed):
+        if self._stop.is_set():
+            return False
+        if not self._is_ptt_button(button):
+            return
+        if pressed:
+            self._handle_press()
+        else:
+            self._handle_release()
+
+    def _handle_press(self):
+        if self.mode == "hold":
+            self.app.start_recording()
+        elif self.mode == "toggle":
+            if not self.app.state.recording:
+                self.app.start_recording()
+            else:
+                self.app.stop_recording()
+        elif self.mode == "double_tap":
+            now = time.time() * 1000
+            if now - self.last_release < self.double_tap_ms:
+                if not self.app.state.recording:
+                    self.app.start_recording()
+                else:
+                    self.app.stop_recording()
+
+    def _handle_release(self):
+        now = time.time() * 1000
+        if self.mode == "hold":
+            self.app.stop_recording()
+        elif self.mode == "double_tap":
+            self.last_release = now
+
+    def start(self):
+        from pynput import keyboard, mouse
+
+        logging.info("Listening for push-to-talk key: %s", self.app.config.get("push_to_talk_key", "RIGHTCTRL"))
+        self._keyboard_listener = keyboard.Listener(on_press=self._on_key_press, on_release=self._on_key_release)
+        self._keyboard_listener.start()
+
+        if isinstance(self.ptt_key, str):
+            self._mouse_listener = mouse.Listener(on_click=self._on_mouse_click)
+            self._mouse_listener.start()
+
+    def stop(self):
+        self._stop.set()
+        if self._keyboard_listener:
+            self._keyboard_listener.stop()
+        if self._mouse_listener:
+            self._mouse_listener.stop()
+
+
 class InputDeviceManager:
     def __init__(self, app: "VoiceApp"):
         self.app = app
@@ -737,17 +868,17 @@ class VoiceApp:
         self.config_path = args.config
         self.config = config
         self.state = State(model_name=config.get("whisper_model", "base"))
-        self.ptt_key = key_code_from_config(config)
+        self.ptt_key = ptt_key_from_config(config)
         self.transcriber: Optional[WhisperTranscriber] = None
         self.output: Optional[OutputManager] = None
-        self.input_manager: Optional[InputDeviceManager] = None
+        self.input_manager: Optional[Union[InputDeviceManager, MacOSInputManager]] = None
         self.tray: Optional[TrayManager] = None
 
     def setup(self):
         self.mic_index, self.mic_name = check_microphone()
         self.output = OutputManager(self.config)
         self.transcriber = WhisperTranscriber(self.state.model_name, self.config.get("whisper_options", {}))
-        self.input_manager = InputDeviceManager(self)
+        self.input_manager = MacOSInputManager(self) if IS_MACOS else InputDeviceManager(self)
         self.streamer: Optional[StreamingTranscriber] = None
 
         logging.info("Using microphone: %s", self.mic_name)
@@ -857,7 +988,7 @@ class VoiceApp:
 
     def reload_config(self):
         self.config = load_config(self.config_path)
-        self.ptt_key = key_code_from_config(self.config)
+        self.ptt_key = ptt_key_from_config(self.config)
         if self.transcriber:
             self.transcriber.reload(self.config.get("whisper_model", "base"), self._whisper_options())
         self.state.model_name = self.config.get("whisper_model", "base")

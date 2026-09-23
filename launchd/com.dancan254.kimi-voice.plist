@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.dancan254.kimi-voice</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/REPLACE_ME/.venv/kimi-voice/bin/python</string>
+        <string>/Users/REPLACE_ME/bin/kimi-voice.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/kimi-voice.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/kimi-voice.err.log</string>
+</dict>
+</plist>
