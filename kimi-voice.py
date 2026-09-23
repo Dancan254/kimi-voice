@@ -1017,19 +1017,35 @@ class VoiceApp:
 
         if self.config.get("tray", {}).get("enabled", True) and not self.args.no_tray:
             self.tray = TrayManager(self)
-            tray_thread = threading.Thread(target=self.tray.run, daemon=True)
-            tray_thread.start()
-
-        logging.info("Starting input manager")
-        self.input_manager.start()
-
-        try:
-            logging.info("kimi-voice is running")
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            logging.info("Stopping.")
-            self.stop()
+            if IS_MACOS:
+                # On macOS, AppKit UI (including tray icon) must run on the main thread.
+                # Start the input manager in a background thread and run the tray on main.
+                input_thread = threading.Thread(target=self.input_manager.start, daemon=True)
+                input_thread.start()
+                logging.info("kimi-voice is running (tray on main thread)")
+                self.tray.run()
+            else:
+                tray_thread = threading.Thread(target=self.tray.run, daemon=True)
+                tray_thread.start()
+                logging.info("Starting input manager")
+                self.input_manager.start()
+                try:
+                    logging.info("kimi-voice is running")
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    logging.info("Stopping.")
+                    self.stop()
+        else:
+            logging.info("Starting input manager")
+            self.input_manager.start()
+            try:
+                logging.info("kimi-voice is running")
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                logging.info("Stopping.")
+                self.stop()
 
 
 def setup_logging():
