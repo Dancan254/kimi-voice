@@ -207,13 +207,13 @@ tail -f /tmp/kimi-voice.out.log /tmp/kimi-voice.err.log
 To stop:
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.dancan254.kimi-voice.plist
+launchctl bootout gui/$(id -u)/com.dancan254.kimi-voice
 ```
 
 To start again:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.dancan254.kimi-voice.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dancan254.kimi-voice.plist
 ```
 
 ## Streaming / long audio

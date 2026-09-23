@@ -100,15 +100,18 @@ install_macos() {
     mkdir -p "$LAUNCHD_DIR"
     sed "s|REPLACE_ME|$USER|g" "$REPO_DIR/launchd/$PLIST_NAME" > "$PLIST_PATH"
 
+    USER_UID=$(id -u)
+    DOMAIN="gui/$USER_UID"
+
     if launchctl list com.dancan254.kimi-voice &>/dev/null; then
-        launchctl unload "$PLIST_PATH" || true
+        launchctl bootout "$DOMAIN/com.dancan254.kimi-voice" || true
     fi
-    launchctl load "$PLIST_PATH"
+    launchctl bootstrap "$DOMAIN" "$PLIST_PATH"
 
     echo "==> Done. The tray icon should appear shortly."
     echo "    Logs: /tmp/kimi-voice.out.log and /tmp/kimi-voice.err.log"
-    echo "    Stop: launchctl unload ~/Library/LaunchAgents/$PLIST_NAME"
-    echo "    Start: launchctl load ~/Library/LaunchAgents/$PLIST_NAME"
+    echo "    Stop: launchctl bootout $DOMAIN/com.dancan254.kimi-voice"
+    echo "    Start: launchctl bootstrap $DOMAIN ~/Library/LaunchAgents/$PLIST_NAME"
     echo ""
     echo "NOTE: The first run will prompt for Microphone and Accessibility permissions."
     echo "      Grant both in System Settings > Privacy & Security."
