@@ -287,6 +287,53 @@ Grant both in **System Settings > Privacy & Security**. If the app cannot type, 
 
 This tool reads raw keyboard and mouse events. On Ubuntu it reads from `/dev/input/event*`; on macOS it uses global input listeners via `pynput`. It is intended for personal use on your own machine. Do not install it on shared or untrusted systems.
 
+## Uninstall
+
+### Ubuntu
+
+```bash
+# Stop services
+systemctl --user stop kimi-voice.service
+systemctl --user stop ydotoold.service
+systemctl --user disable kimi-voice.service
+systemctl --user disable ydotoold.service
+
+# Remove files
+rm -f ~/.config/systemd/user/kimi-voice.service
+rm -f ~/.config/systemd/user/ydotoold.service
+rm -f ~/bin/kimi-voice
+rm -f ~/bin/kimi-voice.py
+rm -rf ~/.venv/kimi-voice
+rm -rf ~/.config/kimi-voice
+rm -f /tmp/kimi-voice*.log
+
+# Remove udev rules
+sudo rm -f /etc/udev/rules.d/50-kimi-voice.rules
+sudo udevadm control --reload-rules
+```
+
+### macOS
+
+```bash
+# Stop and unload the background service
+launchctl bootout gui/$(id -u)/com.dancan254.kimi-voice || true
+
+# Remove files
+rm -f ~/Library/LaunchAgents/com.dancan254.kimi-voice.plist
+rm -f ~/bin/kimi-voice
+rm -f ~/bin/kimi-voice.py
+rm -f ~/bin/kimi-voice-macos-wrapper
+rm -rf ~/.venv/kimi-voice
+rm -rf ~/.config/kimi-voice
+rm -f /tmp/kimi-voice*.log
+```
+
+Then manually remove the Accessibility permission:
+
+1. **System Settings → Privacy & Security → Accessibility**
+2. Select **kimi-voice**
+3. Click the **–** button
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
