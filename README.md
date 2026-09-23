@@ -60,7 +60,9 @@ The installer will:
 
 ## Usage
 
-After install, the service is already running in the tray. Hold **Right Ctrl**, speak, release. The transcription is typed (X11, macOS) or handled via the action menu / clipboard fallback (Wayland).
+After install, the service is already running. Hold **Right Ctrl** (Linux) or **Left Ctrl** (macOS), speak, release. The transcription is typed into the focused window.
+
+On macOS, the system tray icon is disabled by default because the pystray backend can crash on some macOS versions. You can re-enable it by setting `"tray": { "enabled": true }` in `~/.config/kimi-voice/config.json`.
 
 Run manually:
 

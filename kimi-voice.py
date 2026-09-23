@@ -189,7 +189,7 @@ def default_config():
             "action_menu": True,
         },
         "audio": {"channels": 1, "dtype": "int16"},
-        "tray": {"enabled": True},
+        "tray": {"enabled": False if IS_MACOS else True},
     }
 
 
