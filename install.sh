@@ -22,13 +22,14 @@ install_python_deps() {
 }
 
 install_binaries_and_config() {
+    local copy_config="${1:-true}"
     echo "==> Installing binaries and config"
     mkdir -p "$BIN_DIR" "$CONFIG_DIR"
     cp "$REPO_DIR/kimi-voice.py" "$BIN_DIR/kimi-voice.py"
     chmod +x "$BIN_DIR/kimi-voice.py"
     cp "$REPO_DIR/kimi-voice" "$BIN_DIR/kimi-voice"
     chmod +x "$BIN_DIR/kimi-voice"
-    if [ ! -f "$CONFIG_DIR/config.json" ]; then
+    if [ "$copy_config" = "true" ] && [ ! -f "$CONFIG_DIR/config.json" ]; then
         cp "$REPO_DIR/config.json" "$CONFIG_DIR/config.json"
     fi
 }
@@ -47,7 +48,7 @@ install_linux() {
     fi
 
     install_python_deps
-    install_binaries_and_config
+    install_binaries_and_config true
 
     echo "==> Installing udev rules"
     sudo cp "$REPO_DIR/udev/50-kimi-voice.rules" /etc/udev/rules.d/
@@ -94,7 +95,7 @@ install_macos() {
     fi
 
     install_python_deps
-    install_binaries_and_config
+    install_binaries_and_config false
 
     echo "==> Installing LaunchAgent"
     mkdir -p "$LAUNCHD_DIR"

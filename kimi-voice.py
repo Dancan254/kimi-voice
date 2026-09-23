@@ -154,7 +154,7 @@ class State:
 
 def default_config():
     return {
-        "push_to_talk_key": "RIGHTCTRL",
+        "push_to_talk_key": "LEFTCTRL" if IS_MACOS else "RIGHTCTRL",
         "push_to_talk_mode": "hold",
         "double_tap_ms": 300,
         "max_recording_seconds": 60,
