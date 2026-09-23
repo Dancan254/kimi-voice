@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 kimi-voice — push-to-talk voice input for Kimi Code CLI (and any terminal).
 
@@ -116,7 +117,14 @@ def default_config():
         "push_to_talk_key": "RIGHTCTRL",
         "push_to_talk_mode": "hold",
         "double_tap_ms": 300,
+        "max_recording_seconds": 60,
         "whisper_model": "base",
+        "whisper_options": {
+            "condition_on_previous_text": False,
+            "vad_filter": True,
+            "beam_size": 5,
+            "best_of": 5,
+        },
         "language": "en",
         "sample_rate": 16000,
         "vad": {
@@ -128,6 +136,12 @@ def default_config():
         "commands": {
             "enabled": True,
             "map": COMMANDS,
+        },
+        "streaming": {
+            "enabled": True,
+            "chunk_seconds": 10,
+            "overlap_seconds": 1,
+            "output_mode": "accumulate",
         },
         "wayland_typing": {
             "preferred": ["wtype", "ydotool"],
@@ -268,7 +282,9 @@ def trim_silence(frames: List[np.ndarray], sample_rate: int, threshold: float,
     return frames[first_speech:last_speech + 1]
 
 
-def record_audio(state: State, device: int, sample_rate: int, channels: int, dtype: str, config: dict):
+def record_audio(state: State, device: int, sample_rate: int, channels: int, dtype: str,
+                 config: dict, streamer: Optional[StreamingTranscriber] = None,
+                 max_seconds: Optional[float] = None):
     with state.lock:
         state.audio_frames = []
     state.stop_recording.clear()
@@ -278,6 +294,8 @@ def record_audio(state: State, device: int, sample_rate: int, channels: int, dty
             logging.warning("Audio status: %s", status)
         with state.lock:
             state.audio_frames.append(indata.copy())
+        if streamer:
+            streamer.add([indata.copy()])
 
     last_error = None
     for attempt in range(3):
@@ -289,7 +307,13 @@ def record_audio(state: State, device: int, sample_rate: int, channels: int, dty
                 dtype=dtype,
                 callback=callback,
             ):
-                state.stop_recording.wait()
+                if max_seconds:
+                    state.stop_recording.wait(timeout=max_seconds)
+                    if not state.stop_recording.is_set():
+                        logging.info("Max recording duration reached (%ss)", max_seconds)
+                        state.stop_recording.set()
+                else:
+                    state.stop_recording.wait()
             return
         except Exception as ex:
             last_error = ex
@@ -314,19 +338,105 @@ def save_wav(path: Path, frames: List[np.ndarray], sample_rate: int, channels: i
 
 
 class WhisperTranscriber:
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, options: dict):
         from faster_whisper import WhisperModel
         self.model_name = model_name
-        self.model = WhisperModel(model_name, device="cpu", compute_type="int8")
+        self.options = options
+        device = os.environ.get("WHISPER_DEVICE", "cpu")
+        compute_type = "float16" if device == "cuda" else "int8"
+        self.model = WhisperModel(model_name, device=device, compute_type=compute_type)
 
-    def transcribe(self, path: Path, language: str) -> str:
-        segments, _ = self.model.transcribe(str(path), language=language, condition_on_previous_text=False)
+    def transcribe(self, audio_input, language: str) -> str:
+        """audio_input can be a Path or a numpy int16 array."""
+        from faster_whisper import decode_audio
+
+        if isinstance(audio_input, Path):
+            audio = decode_audio(str(audio_input), sampling_rate=self.model.feature_extractor.sampling_rate)
+        else:
+            audio = audio_input.astype(np.float32) / 32768.0
+
+        segments, _ = self.model.transcribe(
+            audio,
+            language=language,
+            **self.options,
+        )
         return " ".join(segment.text.strip() for segment in segments).strip()
 
-    def reload(self, model_name: str):
-        if self.model_name != model_name:
+    def reload(self, model_name: str, options: dict):
+        if self.model_name != model_name or self.options != options:
             logging.info("Switching Whisper model from %s to %s", self.model_name, model_name)
-            self.__init__(model_name)
+            self.__init__(model_name, options)
+
+
+class StreamingTranscriber:
+    """Transcribes audio in chunks while recording is still in progress."""
+
+    def __init__(self, transcriber: WhisperTranscriber, config: dict):
+        self.transcriber = transcriber
+        self.config = config
+        self.sample_rate = config.get("sample_rate", 16000)
+        self.cfg = config.get("streaming", {})
+        self.chunk_seconds = self.cfg.get("chunk_seconds", 10)
+        self.overlap_seconds = self.cfg.get("overlap_seconds", 1)
+        self.output_mode = self.cfg.get("output_mode", "accumulate")
+
+        self.buffer = np.array([], dtype=np.int16)
+        self.results: List[str] = []
+        self.lock = threading.Lock()
+        self.stop_event = threading.Event()
+        self.output = OutputManager(config)
+        self.thread = threading.Thread(target=self._worker, daemon=True)
+        self.thread.start()
+
+    def add(self, frames: List[np.ndarray]):
+        if not frames:
+            return
+        data = np.concatenate(frames, axis=0).astype(np.int16).ravel()
+        with self.lock:
+            self.buffer = np.concatenate([self.buffer, data])
+
+    def _worker(self):
+        chunk_samples = int(self.chunk_seconds * self.sample_rate)
+        overlap_samples = int(self.overlap_seconds * self.sample_rate)
+
+        while not self.stop_event.is_set():
+            with self.lock:
+                total = len(self.buffer)
+
+            if total < chunk_samples:
+                time.sleep(0.05)
+                continue
+
+            with self.lock:
+                chunk_data = self.buffer[:chunk_samples].copy()
+                # Keep overlap for context across chunks.
+                self.buffer = self.buffer[max(0, chunk_samples - overlap_samples):].copy()
+
+            text = self._transcribe(chunk_data)
+            if text:
+                self.results.append(text)
+                if self.output_mode == "realtime":
+                    self.output.type_text(text + " ")
+
+    def _transcribe(self, data: np.ndarray) -> str:
+        try:
+            return self.transcriber.transcribe(data, self.config.get("language", "en"))
+        except Exception as ex:
+            logging.error("Chunk transcription failed: %s", ex)
+            return ""
+
+    def finalize(self) -> str:
+        self.stop_event.set()
+        self.thread.join()
+
+        with self.lock:
+            if len(self.buffer) > 0:
+                text = self._transcribe(self.buffer)
+                if text:
+                    self.results.append(text)
+                self.buffer = np.array([], dtype=np.int16)
+
+        return " ".join(self.results).strip()
 
 
 def process_commands(text: str, command_map: dict) -> str:
@@ -623,8 +733,9 @@ class VoiceApp:
     def setup(self):
         self.mic_index, self.mic_name = check_microphone()
         self.output = OutputManager(self.config)
-        self.transcriber = WhisperTranscriber(self.state.model_name)
+        self.transcriber = WhisperTranscriber(self.state.model_name, self.config.get("whisper_options", {}))
         self.input_manager = InputDeviceManager(self)
+        self.streamer: Optional[StreamingTranscriber] = None
 
         logging.info("Using microphone: %s", self.mic_name)
         logging.info("Push-to-talk key: %s", self.config.get("push_to_talk_key", "RIGHTCTRL"))
@@ -637,10 +748,18 @@ class VoiceApp:
             self.state.recording = True
             self.state.audio_frames = []
         self.state.stop_recording.clear()
+
+        if self.config.get("streaming", {}).get("enabled", True):
+            self.streamer = StreamingTranscriber(self.transcriber, self.config)
+        else:
+            self.streamer = None
+
+        max_seconds = self.config.get("max_recording_seconds")
         self.state.record_thread = threading.Thread(
             target=record_audio,
             args=(self.state, self.mic_index, self.config.get("sample_rate", 16000),
-                  self.config["audio"]["channels"], self.config["audio"]["dtype"], self.config),
+                  self.config["audio"]["channels"], self.config["audio"]["dtype"], self.config,
+                  self.streamer, max_seconds),
             daemon=True,
         )
         self.state.record_thread.start()
@@ -662,7 +781,28 @@ class VoiceApp:
         if self.tray:
             self.tray.update_status("ready")
 
-        self._transcribe_and_type(frames)
+        if self.streamer:
+            text = self.streamer.finalize()
+            output_mode = self.config.get("streaming", {}).get("output_mode", "accumulate")
+            self.streamer = None
+            if output_mode == "accumulate":
+                self._output_text(text)
+        else:
+            self._transcribe_and_type(frames)
+
+    def _output_text(self, text: str):
+        if not text:
+            return
+
+        if self.config.get("commands", {}).get("enabled", True):
+            text = process_commands(text, self.config.get("commands", {}).get("map", COMMANDS))
+
+        self.state.last_text = text
+        print(f"[transcribed] {text}")
+        self.output.type_text(text + " ")
+
+        if self.args.once:
+            self.stop()
 
     def _transcribe_and_type(self, frames):
         sample_rate = self.config.get("sample_rate", 16000)
@@ -686,36 +826,27 @@ class VoiceApp:
                 return
 
             text = self.transcriber.transcribe(tmp_path, self.config.get("language", "en"))
-            if not text:
-                return
-
-            if self.config.get("commands", {}).get("enabled", True):
-                text = process_commands(text, self.config.get("commands", {}).get("map", COMMANDS))
-
-            self.state.last_text = text
-            print(f"[transcribed] {text}")
-
-            self.output.type_text(text + " ")
-
-            if self.args.once:
-                self.stop()
+            self._output_text(text)
         except Exception as ex:
             logging.error("Transcription failed: %s\n%s", ex, traceback.format_exc())
         finally:
             tmp_path.unlink(missing_ok=True)
+
+    def _whisper_options(self):
+        return self.config.get("whisper_options", {})
 
     def set_model(self, model_name: str):
         self.config["whisper_model"] = model_name
         self.state.model_name = model_name
         save_config(self.config_path, self.config)
         if self.transcriber:
-            self.transcriber.reload(model_name)
+            self.transcriber.reload(model_name, self._whisper_options())
 
     def reload_config(self):
         self.config = load_config(self.config_path)
         self.ptt_key = key_code_from_config(self.config)
         if self.transcriber:
-            self.transcriber.reload(self.config.get("whisper_model", "base"))
+            self.transcriber.reload(self.config.get("whisper_model", "base"), self._whisper_options())
         self.state.model_name = self.config.get("whisper_model", "base")
         if self.output:
             self.output.config = self.config

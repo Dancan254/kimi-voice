@@ -64,7 +64,14 @@ Edit `~/.config/kimi-voice/config.json`:
   "push_to_talk_key": "RIGHTCTRL",
   "push_to_talk_mode": "hold",
   "double_tap_ms": 300,
+  "max_recording_seconds": 60,
   "whisper_model": "base",
+  "whisper_options": {
+    "condition_on_previous_text": false,
+    "vad_filter": true,
+    "beam_size": 5,
+    "best_of": 5
+  },
   "language": "en",
   "sample_rate": 16000,
   "vad": {
@@ -76,6 +83,12 @@ Edit `~/.config/kimi-voice/config.json`:
   "commands": {
     "enabled": true,
     "map": { "period": ".", "comma": ",", "new line": "\n" }
+  },
+  "streaming": {
+    "enabled": true,
+    "chunk_seconds": 10,
+    "overlap_seconds": 1,
+    "output_mode": "accumulate"
   },
   "wayland_typing": {
     "preferred": ["wtype", "ydotool"],
@@ -159,6 +172,54 @@ To disable auto-start:
 systemctl --user disable kimi-voice.service
 systemctl --user disable ydotoold.service
 ```
+
+## Streaming / long audio
+
+When `streaming.enabled` is `true`, audio is transcribed in overlapping chunks while you are still holding the push-to-talk key. This makes long dictation sessions feel much faster because most chunks are already done by the time you release the key.
+
+- `chunk_seconds` — how often a chunk is sent to Whisper (default 10).
+- `overlap_seconds` — how much audio is kept between chunks for context (default 1).
+- `output_mode` — `accumulate` waits until release and outputs everything at once; `realtime` types each chunk as it is ready (X11 only).
+
+Set `streaming.enabled` to `false` to transcribe the whole recording in one go.
+
+## Performance tuning
+
+Speed depends mostly on your CPU/GPU and the Whisper model size.
+
+| Model | Accuracy | Speed | VRAM / RAM |
+|-------|----------|-------|------------|
+| `tiny` | Lowest | Fastest | ~1 GB |
+| `base` | Good | Fast | ~1 GB |
+| `small` | Better | Medium | ~2 GB |
+| `medium` | High | Slow | ~5 GB |
+| `large-v2` | Highest | Slowest | ~10 GB |
+
+**To go faster:**
+
+1. Switch to a smaller model from the tray menu or by editing `whisper_model`.
+2. Lower `whisper_options.beam_size` to `1` (fastest, slightly less accurate).
+3. Keep `whisper_options.vad_filter` enabled — it skips silence.
+4. Reduce `max_recording_seconds` to avoid runaway recordings.
+5. Shrink `streaming.chunk_seconds` so each chunk is smaller (more overhead but lower latency).
+
+**If you have an NVIDIA GPU:**
+
+Edit `~/.config/systemd/user/kimi-voice.service` and add an environment variable:
+
+```ini
+[Service]
+Environment="WHISPER_DEVICE=cuda"
+```
+
+Then reload and restart:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart kimi-voice.service
+```
+
+GPU support requires the CUDA version of the Whisper backend. On CPU-only machines the default `cpu` / `int8` settings are used.
 
 ## Logs
 

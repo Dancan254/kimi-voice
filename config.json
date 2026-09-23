@@ -2,7 +2,14 @@
   "push_to_talk_key": "RIGHTCTRL",
   "push_to_talk_mode": "hold",
   "double_tap_ms": 300,
+  "max_recording_seconds": 60,
   "whisper_model": "base",
+  "whisper_options": {
+    "condition_on_previous_text": false,
+    "vad_filter": true,
+    "beam_size": 5,
+    "best_of": 5
+  },
   "language": "en",
   "sample_rate": 16000,
   "vad": {
@@ -48,6 +55,12 @@
       "at": "@",
       "exclamation": "!"
     }
+  },
+  "streaming": {
+    "enabled": true,
+    "chunk_seconds": 10,
+    "overlap_seconds": 1,
+    "output_mode": "accumulate"
   },
   "wayland_typing": {
     "preferred": ["wtype", "ydotool"],
