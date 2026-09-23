@@ -13,6 +13,13 @@
     <true/>
     <key>KeepAlive</key>
     <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>DYLD_LIBRARY_PATH</key>
+        <string>/opt/homebrew/lib:/usr/local/lib</string>
+    </dict>
     <key>StandardOutPath</key>
     <string>/tmp/kimi-voice.out.log</string>
     <key>StandardErrorPath</key>
