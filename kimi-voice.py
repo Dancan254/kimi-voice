@@ -500,7 +500,7 @@ class TrayManager:
 
     def update_status(self, status: str):
         color = {"ready": "green", "recording": "red", "error": "orange"}.get(status, "gray")
-        self.state.tray_status = status
+        self.app.state.tray_status = status
         if self.icon:
             self.icon.icon = self._create_image(color)
             self.icon.title = f"kimi-voice ({status})"
